@@ -37,7 +37,6 @@ def extract_links(text: str) -> list:
     if "portfolio" in lower_text and not any("portfolio" in l or "github" in l for l in found_links):
         found_links.append("External Portfolio (Detected)")
     return list(set(found_links))
-
 @app.post("/api/v1/evaluate")
 async def evaluate_resume(resume: UploadFile = File(...), job_description: str = Form(...)):
     filename_lower = resume.filename.lower()
@@ -63,6 +62,7 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
         matched_skills = []
         missing_skills = []
         semantic_score = 50.0
+        raw_ai_output = "AI call did not run or failed."
 
         if ai_client:
             prompt = f"""
@@ -80,13 +80,11 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
             MISSING_SKILLS: [comma-separated list of gaps found]
             """
             try:
-                response = ai_client.models.generate_content(model='gemini-3.1-flash-lite', contents=prompt)
-                res_text = response.text
+                response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                raw_ai_output = response.text
                 
-                for line in res_text.split('\n'):
+                for line in raw_ai_output.split('\n'):
                     clean_line = line.strip()
-                    
-                    # 🧼 STRIP HIDDEN ASTERISKS: Removes any ** markdown formatting the AI adds
                     normalized_line = re.sub(r'[\*_]', '', clean_line).strip()
                     
                     if normalized_line.upper().startswith("SCORE:"):
@@ -101,14 +99,18 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
                         content = normalized_line.split(":", 1)[1].strip()
                         if content and content.lower() != "none":
                             missing_skills = [s.strip() for s in content.split(",") if s.strip()]
-            except Exception:
-                pass
+            except Exception as e:
+                raw_ai_output = f"API Error: {str(e)}"
 
         detected_links = extract_links(extracted_text)
         links_score = 100.0 if len(detected_links) > 0 else 0.0
 
         final_score = round((semantic_score * 0.90) + (links_score * 0.10), 2)
         rating = "STRONG MATCH" if final_score >= 70 else "AVERAGE MATCH" if final_score >= 40 else "WEAK MATCH"
+
+        # 🚨 TEMPORARILY FORCE THE RAW OUTPUT INTO MISSING SKILLS SO YOU CAN SEE IT ON STREAMLIT
+        if not missing_skills:
+            missing_skills = [f"RAW AI DEBUG: {raw_ai_output}"]
 
         return {
             "final_match_rating": rating,
