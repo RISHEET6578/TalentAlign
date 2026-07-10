@@ -36,7 +36,7 @@ if st.button("🚀 Bridge the Gap", type="primary", use_container_width=True):
                     st.session_state["report"] = response.json()
                     st.session_state["jd_text_saved"] = jd_text
                 else:
-                    st.error(f"Backend 404/Error Path: {response.status_code}")
+                    st.error(f"Backend Error: {response.status_code}")
             except Exception as e:
                 st.error(f"Cannot contact engine: {e}")
 
@@ -65,17 +65,18 @@ if "report" in st.session_state:
     if st.button("🧠 Generate AI Optimization Plan"):
         with st.spinner("Running AI Coach..."):
             try:
-                coaching_data = {"resume_text": report["raw_resume_text"], "job_description": st.session_state["jd_text_saved"], "overall_score": report['overall_score']}
+                coaching_data = {
+                    "resume_text": report.get("raw_resume_text", ""), 
+                    "job_description": st.session_state.get("jd_text_saved", ""), 
+                    "overall_score": report.get('overall_score', 50.0)
+                }
                 coach_response = requests.post(f"{BACKEND_URL}/api/v1/coaching", data=coaching_data)
                 if coach_response.status_code == 200:
-                    st.session_state["coaching_report"] = coach_response.json()["coaching_report"]
+                    st.session_state["coaching_report"] = coach_response.json().get("coaching_report", "No response content generated.")
+                else:
+                    st.error(f"Coach endpoint returned status: {coach_response.status_code}")
             except Exception as e:
                 st.error(f"Coach connection error: {e}")
 
     if "coaching_report" in st.session_state:
         st.markdown(st.session_state["coaching_report"])
-
-    # 🔍 Live Data Stream Inspector Window
-    st.markdown("---")
-    with st.expander("👀 Debug Inspection: Raw Backend Response Data"):
-        st.json(report)
