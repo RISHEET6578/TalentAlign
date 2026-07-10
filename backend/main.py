@@ -62,31 +62,29 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
 
         matched_skills = []
         missing_skills = []
-        semantic_score = 50.0
+        semantic_score = 65.0
 
         if ai_client:
             prompt = f"""
-            Compare this Resume and Job Description. Extract matching and missing key competencies.
+            Analyze this resume and job description to extract core competencies.
             
             RESUME:
             {extracted_text[:3000]}
             
-            JD:
+            JOB DESCRIPTION:
             {job_description[:1500]}
             
-            You MUST return your answer EXACTLY in this format:
-            SCORE: [number between 0 and 100]
-            MATCHED_SKILLS: [comma-separated list of skills found]
-            MISSING_SKILLS: [comma-separated list of gaps found]
+            Return the output strictly in this pattern:
+            SCORE: [Insert match score between 0 and 100]
+            MATCHED_SKILLS: [Comma-separated skills present in the resume that align with the job description requirements]
+            MISSING_SKILLS: [Comma-separated skills missing or required by the job description but weak in the resume]
             """
             try:
                 response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                res_text = response.text
+                res_text = str(response.text)
                 
-                # 🧼 1. Clean out markdown asterisks and underscores immediately
                 normalized_text = re.sub(r'[\*_]', '', res_text)
                 
-                # 🎯 2. Robust Regex Parsing (Works even if the AI responds on one single line)
                 score_match = re.search(r"SCORE:\s*(\d+)", normalized_text, re.IGNORECASE)
                 if score_match:
                     semantic_score = float(score_match.group(1))
@@ -132,10 +130,22 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
 @app.post("/api/v1/coaching")
 async def generate_coaching_feedback(resume_text: str = Form(...), job_description: str = Form(...), overall_score: float = Form(...)):
     if not ai_client:
-        return {"coaching_report": "⚠️ AI Coaching unavailable."}
-    prompt = f"Provide career advice matching Markdown requirements for score {overall_score}%.\nResume: {resume_text[:2000]}\nJD: {job_description[:1000]}"
+        return {"coaching_report": "⚠️ AI Coaching system is currently offline."}
+        
+    prompt = f"""
+    You are an expert career coach. Analyze the candidate's resume and target job description to create an operational optimization action plan.
+    Provide constructive, markdown-formatted professional advice including structured action bullets on how they can bridge their gaps for this position.
+    
+    Current Match Score: {overall_score}%
+    
+    Candidate Resume Background: 
+    {resume_text[:2500]}
+    
+    Target Job Description: 
+    {job_description[:1500]}
+    """
     try:
         response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-        return {"coaching_report": response.text}
+        return {"coaching_report": response.text.strip()}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"coaching_report": f"⚠️ Error generating feedback: {str(e)}"}
