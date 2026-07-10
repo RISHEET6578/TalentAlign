@@ -37,6 +37,7 @@ def extract_links(text: str) -> list:
     if "portfolio" in lower_text and not any("portfolio" in l or "github" in l for l in found_links):
         found_links.append("External Portfolio (Detected)")
     return list(set(found_links))
+
 @app.post("/api/v1/evaluate")
 async def evaluate_resume(resume: UploadFile = File(...), job_description: str = Form(...)):
     filename_lower = resume.filename.lower()
@@ -62,7 +63,6 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
         matched_skills = []
         missing_skills = []
         semantic_score = 50.0
-        raw_ai_output = "AI call did not run or failed."
 
         if ai_client:
             prompt = f"""
@@ -81,36 +81,35 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
             """
             try:
                 response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                raw_ai_output = response.text
+                res_text = response.text
                 
-                for line in raw_ai_output.split('\n'):
-                    clean_line = line.strip()
-                    normalized_line = re.sub(r'[\*_]', '', clean_line).strip()
+                # 🧼 1. Clean out markdown asterisks and underscores immediately
+                normalized_text = re.sub(r'[\*_]', '', res_text)
+                
+                # 🎯 2. Robust Regex Parsing (Works even if the AI responds on one single line)
+                score_match = re.search(r"SCORE:\s*(\d+)", normalized_text, re.IGNORECASE)
+                if score_match:
+                    semantic_score = float(score_match.group(1))
                     
-                    if normalized_line.upper().startswith("SCORE:"):
-                        nums = re.findall(r'\d+', normalized_line)
-                        if nums:
-                            semantic_score = float(nums[0])
-                    elif normalized_line.upper().startswith("MATCHED_SKILLS:"):
-                        content = normalized_line.split(":", 1)[1].strip()
-                        if content and content.lower() != "none":
-                            matched_skills = [s.strip() for s in content.split(",") if s.strip()]
-                    elif normalized_line.upper().startswith("MISSING_SKILLS:"):
-                        content = normalized_line.split(":", 1)[1].strip()
-                        if content and content.lower() != "none":
-                            missing_skills = [s.strip() for s in content.split(",") if s.strip()]
-            except Exception as e:
-                raw_ai_output = f"API Error: {str(e)}"
+                matched_match = re.search(r"MATCHED_SKILLS:\s*(.*?)(?=MISSING_SKILLS:|$)", normalized_text, re.IGNORECASE | re.DOTALL)
+                if matched_match:
+                    content = matched_match.group(1).strip()
+                    if content and content.lower() != "none":
+                        matched_skills = [s.strip() for s in content.split(",") if s.strip()]
+                        
+                missing_match = re.search(r"MISSING_SKILLS:\s*(.*)", normalized_text, re.IGNORECASE | re.DOTALL)
+                if missing_match:
+                    content = missing_match.group(1).strip()
+                    if content and content.lower() != "none":
+                        missing_skills = [s.strip() for s in content.split(",") if s.strip()]
+            except Exception:
+                pass
 
         detected_links = extract_links(extracted_text)
         links_score = 100.0 if len(detected_links) > 0 else 0.0
 
         final_score = round((semantic_score * 0.90) + (links_score * 0.10), 2)
         rating = "STRONG MATCH" if final_score >= 70 else "AVERAGE MATCH" if final_score >= 40 else "WEAK MATCH"
-
-        # 🚨 TEMPORARILY FORCE THE RAW OUTPUT INTO MISSING SKILLS SO YOU CAN SEE IT ON STREAMLIT
-        if not missing_skills:
-            missing_skills = [f"RAW AI DEBUG: {raw_ai_output}"]
 
         return {
             "final_match_rating": rating,
@@ -136,7 +135,7 @@ async def generate_coaching_feedback(resume_text: str = Form(...), job_descripti
         return {"coaching_report": "⚠️ AI Coaching unavailable."}
     prompt = f"Provide career advice matching Markdown requirements for score {overall_score}%.\nResume: {resume_text[:2000]}\nJD: {job_description[:1000]}"
     try:
-        response = ai_client.models.generate_content(model='gemini-3.1-flash-lite', contents=prompt)
+        response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
         return {"coaching_report": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
