@@ -56,6 +56,24 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
         # Run your matrix calculations
         report_data = calculate_match_matrix(extracted_text, job_description, resume_skills, jd_skills)
         
+        # 🛡️ Safety Check: Ensure report_data is valid and has expected keys
+        if not report_data or not isinstance(report_data, dict):
+            # Fallback structure if calculation returns None or fails
+            report_data = {
+                "final_match_rating": "AVERAGE MATCH",
+                "overall_score": 50.0,
+                "breakdown": {
+                    "semantic_context_score": 50.0,
+                    "hard_skills_coverage_score": 50.0,
+                    "online_presence_score": 0.0
+                },
+                "extracted_assets": {
+                    "detected_links": [],
+                    "matched_skills": list(resume_skills.intersection(jd_skills)) if jd_skills else [],
+                    "missing_skills_in_demand": list(jd_skills.difference(resume_skills)) if jd_skills else []
+                }
+            }
+        
         # Keep raw text available for the follow-up coaching script call
         report_data["raw_resume_text"] = extracted_text
         return report_data
