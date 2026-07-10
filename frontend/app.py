@@ -13,7 +13,7 @@ st.markdown("""
 st.title("🎯 TalentAlign: Smart Matcher Desk")
 st.markdown("---")
 
-# 🚨 PASTE YOUR EXACT GENERATED RENDER SERVICE LINK HERE (NO TRAILING SLASH)
+# 🚨 BACKEND ENDPOINT SPECIFICATION
 BACKEND_URL = "https://talentalign-uc88.onrender.com" 
 
 col1, col2 = st.columns([1, 1], gap="large")
@@ -49,14 +49,14 @@ if "report" in st.session_state:
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("##### 🟢 Matched Competencies")
-        if assets["matched_skills"]:
+        if assets.get("matched_skills"):
             st.markdown("".join([f"<span class='skill-tag'>{s}</span>" for s in assets["matched_skills"]]), unsafe_allow_html=True)
         else:
             st.caption("No specific keyword tags matched from the standard checklist.")
             
     with c2:
         st.markdown("##### 💡 Missing Skills")
-        if assets["missing_skills_in_demand"]:
+        if assets.get("missing_skills_in_demand"):
             st.markdown("".join([f"<span class='missing-tag'>{s}</span>" for s in assets["missing_skills_in_demand"]]), unsafe_allow_html=True)
         else:
             st.caption("No clear missing tech stack gaps detected!")
@@ -74,3 +74,8 @@ if "report" in st.session_state:
 
     if "coaching_report" in st.session_state:
         st.markdown(st.session_state["coaching_report"])
+
+    # 🔍 Live Data Stream Inspector Window
+    st.markdown("---")
+    with st.expander("👀 Debug Inspection: Raw Backend Response Data"):
+        st.json(report)
