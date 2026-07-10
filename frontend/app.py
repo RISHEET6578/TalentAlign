@@ -49,10 +49,17 @@ if "report" in st.session_state:
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("##### 🟢 Matched Competencies")
-        st.markdown("".join([f"<span class='skill-tag'>{s}</span>" for s in assets["matched_skills"]]), unsafe_allow_html=True)
+        if assets["matched_skills"]:
+            st.markdown("".join([f"<span class='skill-tag'>{s}</span>" for s in assets["matched_skills"]]), unsafe_allow_html=True)
+        else:
+            st.caption("No specific keyword tags matched from the standard checklist.")
+            
     with c2:
         st.markdown("##### 💡 Missing Skills")
-        st.markdown("".join([f"<span class='missing-tag'>{s}</span>" for s in assets["missing_skills_in_demand"]]), unsafe_allow_html=True)
+        if assets["missing_skills_in_demand"]:
+            st.markdown("".join([f"<span class='missing-tag'>{s}</span>" for s in assets["missing_skills_in_demand"]]), unsafe_allow_html=True)
+        else:
+            st.caption("No clear missing tech stack gaps detected!")
 
     st.markdown("---")
     if st.button("🧠 Generate AI Optimization Plan"):
