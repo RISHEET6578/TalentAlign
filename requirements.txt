@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pypdf
+python-docx
+google-genai
+streamlit
+requests
+sentence-transformers
