@@ -60,15 +60,13 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="The file contains no readable text.")
 
-        # 🧠 Let Gemini extract matched and missing skills intelligently from the text
         matched_skills = []
         missing_skills = []
         semantic_score = 50.0
 
         if ai_client:
-            # 1. Get the Match Score and Skills in one single structured prompt
             prompt = f"""
-            Analyze the relationship between this Resume and Job Description.
+            Compare this Resume and Job Description. Extract matching and missing key competencies.
             
             RESUME:
             {extracted_text[:3000]}
@@ -76,36 +74,36 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
             JD:
             {job_description[:1500]}
             
-            Provide the output EXACTLY in this format:
-            Score: [A single number from 0 to 100]
-            Matched: [Comma-separated short phrases or skills the candidate has that match the JD requirements]
-            Missing: [Comma-separated core skills or requirements from the JD that are missing or weak in the resume]
+            You MUST return your answer EXACTLY in this format. Do not use markdown bold on the labels:
+            SCORE: [number between 0 and 100]
+            MATCHED_SKILLS: [comma-separated list of skills found]
+            MISSING_SKILLS: [comma-separated list of gaps found]
             """
             try:
                 response = ai_client.models.generate_content(model='gemini-3.1-flash-lite', contents=prompt)
                 res_text = response.text
                 
-                # Parse Score
-                score_match = re.search(r"Score:\s*(\d+)", res_text)
-                if score_match:
-                    semantic_score = float(score_match.group(1))
-                
-                # Parse Matched Skills
-                matched_match = re.search(r"Matched:\s*(.*)", res_text)
-                if matched_match and matched_match.group(1).strip() and "none" not in matched_match.group(1).lower():
-                    matched_skills = [s.strip() for s in matched_match.group(1).split(",")]
-                    
-                # Parse Missing Skills
-                missing_match = re.search(r"Missing:\s*(.*)", res_text)
-                if missing_match and missing_match.group(1).strip() and "none" not in missing_match.group(1).lower():
-                    missing_skills = [s.strip() for s in missing_match.group(1).split(",")]
+                # Loose case-insensitive matching to ensure it never fails to parse
+                for line in res_text.split('\n'):
+                    clean_line = line.strip()
+                    if clean_line.upper().startswith("SCORE:"):
+                        nums = re.findall(r'\d+', clean_line)
+                        if nums:
+                            semantic_score = float(nums[0])
+                    elif clean_line.upper().startswith("MATCHED_SKILLS:"):
+                        content = clean_line.split(":", 1)[1].strip()
+                        if content and content.lower() != "none":
+                            matched_skills = [s.strip() for s in content.split(",") if s.strip()]
+                    elif clean_line.upper().startswith("MISSING_SKILLS:"):
+                        content = clean_line.split(":", 1)[1].strip()
+                        if content and content.lower() != "none":
+                            missing_skills = [s.strip() for s in content.split(",") if s.strip()]
             except Exception:
                 pass
 
         detected_links = extract_links(extracted_text)
         links_score = 100.0 if len(detected_links) > 0 else 0.0
 
-        # Calculate a balanced final score
         final_score = round((semantic_score * 0.90) + (links_score * 0.10), 2)
         rating = "STRONG MATCH" if final_score >= 70 else "AVERAGE MATCH" if final_score >= 40 else "WEAK MATCH"
 
