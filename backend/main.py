@@ -80,7 +80,7 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
             MISSING_SKILLS: [Comma-separated skills missing or required by the job description but weak in the resume]
             """
             try:
-                response = ai_client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+                response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                 res_text = str(response.text)
                 
                 normalized_text = re.sub(r'[\*_]', '', res_text)
