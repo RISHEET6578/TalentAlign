@@ -15,6 +15,10 @@ st.title("🎯 TalentAlign: Smart Matcher Desk")
 st.caption("Let's see how well this candidate matches the target role rules!")
 st.markdown("---")
 
+# 🌐 PRODUCTION CONFIGURATION: Put your live Render URL here!
+# Replace this string with your exact live Render backend service URL.
+BACKEND_URL = "https://talentalign.onrender.com" 
+
 col1, col2 = st.columns([1, 1], gap="large")
 with col1:
     st.subheader("✨ Your Story (Resume)")
@@ -33,16 +37,19 @@ if st.button("🚀 Bridge the Gap", type="primary", use_container_width=True):
             
         with st.spinner("Analyzing data and matching skills..."):
             try:
-                files = {"resume": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
-                response = requests.post("http://127.0.0.1:8000/api/v1/evaluate", files=files, data={"job_description": jd_text})
+                files = {"resume": (uploaded_file.name, uploaded_file.getvalue(), "application/octet-stream")}
+                # Updated to use live cloud backend destination
+                response = requests.post(f"{BACKEND_URL}/api/v1/evaluate", files=files, data={"job_description": jd_text})
                 
                 if response.status_code == 200:
                     st.session_state["report"] = response.json()
                     st.session_state["jd_text_saved"] = jd_text
+                else:
+                    st.error(f"Backend returned an error status code: {response.status_code}")
             except Exception as e:
-                st.error(f"Could not connect to the backend server: {e}")
+                st.error(f"Could not connect to the online server engine: {e}")
     else:
-        st.error("Please ensure you've uploaded a resume PDF and pasted a job description first!")
+        st.error("Please ensure you've uploaded a resume PDF/DOCX and pasted a job description first!")
 
 # Check if an analysis report is active in memory state to render views
 if "report" in st.session_state:
@@ -115,15 +122,16 @@ if "report" in st.session_state:
                     "job_description": jd_text_saved,
                     "overall_score": score
                 }
-                coach_response = requests.post("http://127.0.0.1:8000/api/v1/coaching", data=coaching_data)
+                # Updated to use live cloud backend destination
+                coach_response = requests.post(f"{BACKEND_URL}/api/v1/coaching", data=coaching_data)
                 if coach_response.status_code == 200:
                     st.session_state["coaching_report"] = coach_response.json()["coaching_report"]
+                else:
+                    st.error(f"Coach API backend error response code: {coach_response.status_code}")
             except Exception as e:
                 st.error(f"Failed to generate coaching strategy data: {e}")
 
     # --- FIXED NATIVE STREAMLIT AI COACHING INTERFACE BLOCK ---
     if "coaching_report" in st.session_state:
-        # Using a native container keeps your exact usual background, 
-        # fonts, and text colors perfectly consistent with the rest of your UI!
         with st.container():
             st.markdown(st.session_state["coaching_report"])
