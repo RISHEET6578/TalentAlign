@@ -5,5 +5,3 @@ python-docx
 google-genai
 streamlit
 requests
-scikit-learn
-numpy
