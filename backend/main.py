@@ -1,11 +1,13 @@
 import os
 import io
-import re
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
 import docx
-from google.genai import Client
+
+# Import your native local dictionary logic
+from backend.parser import extract_skills_from_text
+from backend.matcher import calculate_match_matrix, ai_client
 
 app = FastAPI(title="TalentAlign API Engine", version="1.0.0")
 
@@ -17,26 +19,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-try:
-    ai_client = Client()
-except Exception:
-    ai_client = None
-
 def extract_text_from_docx(file_bytes: bytes) -> str:
     doc = docx.Document(io.BytesIO(file_bytes))
     return "\n".join([para.text for para in doc.paragraphs])
 
-def extract_links(text: str) -> list:
-    found_links = []
-    for word in text.split():
-        if any(k in word for k in ["github.com", "linkedin.com", "http", "www."]):
-            found_links.append(word.strip(",;|()[]{}"))
-    lower_text = text.lower()
-    if "linkedin" in lower_text and not any("linkedin" in l for l in found_links):
-        found_links.append("linkedin.com (Profile Detected)")
-    if "portfolio" in lower_text and not any("portfolio" in l or "github" in l for l in found_links):
-        found_links.append("External Portfolio (Detected)")
-    return list(set(found_links))
+@app.get("/")
+def home():
+    return {"status": "TalentAlign API Engine is running smoothly!"}
 
 @app.post("/api/v1/evaluate")
 async def evaluate_resume(resume: UploadFile = File(...), job_description: str = Form(...)):
@@ -60,70 +49,17 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="The file contains no readable text.")
 
-        matched_skills = []
-        missing_skills = []
-        semantic_score = 65.0
+        # Run your precise local keyword array extractions
+        resume_skills = extract_skills_from_text(extracted_text)
+        jd_skills = extract_skills_from_text(job_description)
 
-        if ai_client:
-            prompt = f"""
-            Analyze this resume and job description to extract core competencies.
-            
-            RESUME:
-            {extracted_text[:3000]}
-            
-            JOB DESCRIPTION:
-            {job_description[:1500]}
-            
-            Return the output strictly in this pattern:
-            SCORE: [Insert match score between 0 and 100]
-            MATCHED_SKILLS: [Comma-separated skills present in the resume that align with the job description requirements]
-            MISSING_SKILLS: [Comma-separated skills missing or required by the job description but weak in the resume]
-            """
-            try:
-                response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                res_text = str(response.text)
-                
-                normalized_text = re.sub(r'[\*_]', '', res_text)
-                
-                score_match = re.search(r"SCORE:\s*(\d+)", normalized_text, re.IGNORECASE)
-                if score_match:
-                    semantic_score = float(score_match.group(1))
-                    
-                matched_match = re.search(r"MATCHED_SKILLS:\s*(.*?)(?=MISSING_SKILLS:|$)", normalized_text, re.IGNORECASE | re.DOTALL)
-                if matched_match:
-                    content = matched_match.group(1).strip()
-                    if content and content.lower() != "none":
-                        matched_skills = [s.strip() for s in content.split(",") if s.strip()]
-                        
-                missing_match = re.search(r"MISSING_SKILLS:\s*(.*)", normalized_text, re.IGNORECASE | re.DOTALL)
-                if missing_match:
-                    content = missing_match.group(1).strip()
-                    if content and content.lower() != "none":
-                        missing_skills = [s.strip() for s in content.split(",") if s.strip()]
-            except Exception:
-                pass
+        # Run your matrix calculations
+        report_data = calculate_match_matrix(extracted_text, job_description, resume_skills, jd_skills)
+        
+        # Keep raw text available for the follow-up coaching script call
+        report_data["raw_resume_text"] = extracted_text
+        return report_data
 
-        detected_links = extract_links(extracted_text)
-        links_score = 100.0 if len(detected_links) > 0 else 0.0
-
-        final_score = round((semantic_score * 0.90) + (links_score * 0.10), 2)
-        rating = "STRONG MATCH" if final_score >= 70 else "AVERAGE MATCH" if final_score >= 40 else "WEAK MATCH"
-
-        return {
-            "final_match_rating": rating,
-            "overall_score": final_score,
-            "breakdown": {
-                "semantic_context_score": round(semantic_score, 2),
-                "hard_skills_coverage_score": round(semantic_score, 2),
-                "online_presence_score": links_score
-            },
-            "extracted_assets": {
-                "detected_links": detected_links,
-                "matched_skills": matched_skills,
-                "missing_skills_in_demand": missing_skills
-            },
-            "raw_resume_text": extracted_text
-        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
