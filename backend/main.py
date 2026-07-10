@@ -59,40 +59,54 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
                 
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="The file contains no readable text.")
-            
-        # Hardcoded skill parsing matching your original design rules
-        jd_words = set(re.findall(r'\b\w+\b', job_description.lower()))
-        resume_words = set(re.findall(r'\b\w+\b', extracted_text.lower()))
-        
-        # Simple extraction strategy for core keywords
-        common_tech = {"python", "java", "c++", "javascript", "react", "sql", "aws", "docker", "kubernetes", "machine learning", "deep learning", "git"}
-        jd_skills = jd_words.intersection(common_tech)
-        resume_skills = resume_words.intersection(common_tech)
-        
-        detected_links = extract_links(extracted_text)
-        links_score = 100.0 if len(detected_links) > 0 else 0.0
 
-        if not jd_skills:
-            keyword_score = 100.0
-            matched_skills = set()
-            missing_skills = []
-        else:
-            matched_skills = resume_skills.intersection(jd_skills)
-            missing_skills = list(jd_skills.difference(resume_skills))
-            keyword_score = (len(matched_skills) / len(jd_skills)) * 100
+        # 🧠 Let Gemini extract matched and missing skills intelligently from the text
+        matched_skills = []
+        missing_skills = []
+        semantic_score = 50.0
 
-        semantic_score = 50.0 
         if ai_client:
-            prompt = f"Rate structural match between Resume and JD from 0.0 to 1.0. Output numbers only.\nRESUME:\n{extracted_text[:3000]}\nJD:\n{job_description[:1500]}"
+            # 1. Get the Match Score and Skills in one single structured prompt
+            prompt = f"""
+            Analyze the relationship between this Resume and Job Description.
+            
+            RESUME:
+            {extracted_text[:3000]}
+            
+            JD:
+            {job_description[:1500]}
+            
+            Provide the output EXACTLY in this format:
+            Score: [A single number from 0 to 100]
+            Matched: [Comma-separated short phrases or skills the candidate has that match the JD requirements]
+            Missing: [Comma-separated core skills or requirements from the JD that are missing or weak in the resume]
+            """
             try:
                 response = ai_client.models.generate_content(model='gemini-3.1-flash-lite', contents=prompt)
-                match = re.search(r"0\.\d+|1\.0|\d+", response.text.strip())
-                if match:
-                    semantic_score = min(float(match.group()) * 100, 100.0)
+                res_text = response.text
+                
+                # Parse Score
+                score_match = re.search(r"Score:\s*(\d+)", res_text)
+                if score_match:
+                    semantic_score = float(score_match.group(1))
+                
+                # Parse Matched Skills
+                matched_match = re.search(r"Matched:\s*(.*)", res_text)
+                if matched_match and matched_match.group(1).strip() and "none" not in matched_match.group(1).lower():
+                    matched_skills = [s.strip() for s in matched_match.group(1).split(",")]
+                    
+                # Parse Missing Skills
+                missing_match = re.search(r"Missing:\s*(.*)", res_text)
+                if missing_match and missing_match.group(1).strip() and "none" not in missing_match.group(1).lower():
+                    missing_skills = [s.strip() for s in missing_match.group(1).split(",")]
             except Exception:
                 pass
 
-        final_score = round((semantic_score * 0.50) + (keyword_score * 0.40) + (links_score * 0.10), 2)
+        detected_links = extract_links(extracted_text)
+        links_score = 100.0 if len(detected_links) > 0 else 0.0
+
+        # Calculate a balanced final score
+        final_score = round((semantic_score * 0.90) + (links_score * 0.10), 2)
         rating = "STRONG MATCH" if final_score >= 70 else "AVERAGE MATCH" if final_score >= 40 else "WEAK MATCH"
 
         return {
@@ -100,12 +114,12 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
             "overall_score": final_score,
             "breakdown": {
                 "semantic_context_score": round(semantic_score, 2),
-                "hard_skills_coverage_score": round(keyword_score, 2),
+                "hard_skills_coverage_score": round(semantic_score, 2),
                 "online_presence_score": links_score
             },
             "extracted_assets": {
                 "detected_links": detected_links,
-                "matched_skills": list(matched_skills),
+                "matched_skills": matched_skills,
                 "missing_skills_in_demand": missing_skills
             },
             "raw_resume_text": extracted_text
