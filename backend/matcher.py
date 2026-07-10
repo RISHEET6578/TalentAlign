@@ -1,30 +1,19 @@
 import re
-import os
-import numpy as np
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+from google.genai import Client
 
-# Initialize the local AI embedding model
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+try:
+    ai_client = Client()
+except Exception:
+    ai_client = None
 
 def extract_links(text: str) -> list:
-    """
-    Scans the raw text string to extract portfolio link metrics.
-    Includes explicit keyword fallback scanning for clean text representations.
-    """
-    # 1. Standard URL pattern match
-    url_pattern = r'https?://[^\s<>"]+|www\.[^\s<>"]+|[a-zA-Z0-9.-]+\.(?:com|io|me|net)(/[^\s<>"]*)?'
-    links = re.findall(url_pattern, text)
-    
+    """Scans the raw text string to extract portfolio link metrics."""
     found_links = []
     for word in text.split():
         if "github.com" in word or "linkedin.com" in word or "http" in word or "www." in word:
             cleaned_link = word.strip(",;|()[]{}")
             found_links.append(cleaned_link)
             
-    # 2. Contextual Fallback: If text labels exist but raw URLs were stripped by the parser
     lower_text = text.lower()
     if "linkedin" in lower_text and not any("linkedin" in l for l in found_links):
         found_links.append("linkedin.com (Profile Detected)")
@@ -35,28 +24,49 @@ def extract_links(text: str) -> list:
 
 
 def calculate_match_matrix(resume_text: str, jd_text: str, resume_skills: set, jd_skills: set) -> dict:
-    """
-    Evaluates universal candidate eligibility by mapping hard skill metrics,
-    online presence validations, and deep semantic project embeddings.
-    """
+    """Evaluates universal candidate eligibility by mapping hard skill metrics,
+    online presence validations, and deep semantic project embeddings via Gemini."""
     detected_links = extract_links(resume_text)
     links_score = 100.0 if len(detected_links) > 0 else 0.0
 
     if not jd_skills:
         keyword_score = 100.0
+        matched_skills = set()
         missing_skills = []
     else:
         matched_skills = resume_skills.intersection(jd_skills)
         missing_skills = list(jd_skills.difference(resume_skills))
         keyword_score = (len(matched_skills) / len(jd_skills)) * 100
 
-    embeddings = embedding_model.encode([resume_text, jd_text])
-    semantic_sim = cosine_similarity(
-        embeddings[0].reshape(1, -1), 
-        embeddings[1].reshape(1, -1)
-    )[0][0]
+    # Fallback default score if API is down
+    semantic_score = 50.0 
     
-    semantic_score = max(0.0, float(semantic_sim)) * 100
+    # Use Gemini to calculate the semantic matching score instead of a heavy local model
+    if ai_client:
+        prompt = f"""
+        You are an API endpoint that outputs only a raw number.
+        Rate the structural and contextual match between this Resume and Job Description on a scale from 0.0 to 1.0.
+        Consider project alignment, experience level, and domain context.
+        Respond with ONLY a decimal number between 0.0 and 1.0 (e.g., 0.78). Do not write code, markdown, or text.
+
+        RESUME:
+        {resume_text[:4000]}
+
+        JOB DESCRIPTION:
+        {jd_text[:2000]}
+        """
+        try:
+            response = ai_client.models.generate_content(
+                model='gemini-3.1-flash-lite',
+                contents=prompt,
+            )
+            match = re.search(r"0\.\d+|1\.0|\d+", response.text.strip())
+            if match:
+                semantic_score = float(match.group()) * 100
+                if semantic_score > 100:  # Guard against raw percentages
+                    semantic_score = min(semantic_score, 100.0)
+        except Exception:
+            pass # Keep fallback if API fails temporarily
 
     final_score = (semantic_score * 0.50) + (keyword_score * 0.40) + (links_score * 0.10)
     final_score = round(final_score, 2)
