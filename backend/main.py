@@ -74,7 +74,7 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
             JD:
             {job_description[:1500]}
             
-            You MUST return your answer EXACTLY in this format. Do not use markdown bold on the labels:
+            You MUST return your answer EXACTLY in this format:
             SCORE: [number between 0 and 100]
             MATCHED_SKILLS: [comma-separated list of skills found]
             MISSING_SKILLS: [comma-separated list of gaps found]
@@ -83,19 +83,22 @@ async def evaluate_resume(resume: UploadFile = File(...), job_description: str =
                 response = ai_client.models.generate_content(model='gemini-3.1-flash-lite', contents=prompt)
                 res_text = response.text
                 
-                # Loose case-insensitive matching to ensure it never fails to parse
                 for line in res_text.split('\n'):
                     clean_line = line.strip()
-                    if clean_line.upper().startswith("SCORE:"):
-                        nums = re.findall(r'\d+', clean_line)
+                    
+                    # 🧼 STRIP HIDDEN ASTERISKS: Removes any ** markdown formatting the AI adds
+                    normalized_line = re.sub(r'[\*_]', '', clean_line).strip()
+                    
+                    if normalized_line.upper().startswith("SCORE:"):
+                        nums = re.findall(r'\d+', normalized_line)
                         if nums:
                             semantic_score = float(nums[0])
-                    elif clean_line.upper().startswith("MATCHED_SKILLS:"):
-                        content = clean_line.split(":", 1)[1].strip()
+                    elif normalized_line.upper().startswith("MATCHED_SKILLS:"):
+                        content = normalized_line.split(":", 1)[1].strip()
                         if content and content.lower() != "none":
                             matched_skills = [s.strip() for s in content.split(",") if s.strip()]
-                    elif clean_line.upper().startswith("MISSING_SKILLS:"):
-                        content = clean_line.split(":", 1)[1].strip()
+                    elif normalized_line.upper().startswith("MISSING_SKILLS:"):
+                        content = normalized_line.split(":", 1)[1].strip()
                         if content and content.lower() != "none":
                             missing_skills = [s.strip() for s in content.split(",") if s.strip()]
             except Exception:
