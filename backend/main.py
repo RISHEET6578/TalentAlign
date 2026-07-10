@@ -145,7 +145,7 @@ async def generate_coaching_feedback(resume_text: str = Form(...), job_descripti
     {job_description[:1500]}
     """
     try:
-        response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        response = ai_client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
         return {"coaching_report": response.text.strip()}
     except Exception as e:
         return {"coaching_report": f"⚠️ Error generating feedback: {str(e)}"}
