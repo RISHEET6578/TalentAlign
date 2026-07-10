@@ -14,7 +14,7 @@ st.title("🎯 TalentAlign: Smart Matcher Desk")
 st.markdown("---")
 
 # 🚨 PASTE YOUR EXACT GENERATED RENDER SERVICE LINK HERE (NO TRAILING SLASH)
-BACKEND_URL = "https://talentalign.onrender.com" 
+BACKEND_URL = "https://talentalign-uc88.onrender.com" 
 
 col1, col2 = st.columns([1, 1], gap="large")
 with col1:
