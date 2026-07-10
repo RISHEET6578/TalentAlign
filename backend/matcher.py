@@ -1,8 +1,15 @@
+import os
 import re
 from google.genai import Client
 
+# Pull the key from Render's environment setup
+api_key_env = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+
 try:
-    ai_client = Client()
+    if api_key_env:
+        ai_client = Client(api_key=api_key_env)
+    else:
+        ai_client = Client()
 except Exception:
     ai_client = None
 
@@ -41,7 +48,6 @@ def calculate_match_matrix(resume_text: str, jd_text: str, resume_skills: set, j
     # Fallback default score if API is down
     semantic_score = 50.0 
     
-    # Use Gemini to calculate the semantic matching score instead of a heavy local model
     if ai_client:
         prompt = f"""
         You are an API endpoint that outputs only a raw number.
@@ -57,16 +63,18 @@ def calculate_match_matrix(resume_text: str, jd_text: str, resume_skills: set, j
         """
         try:
             response = ai_client.models.generate_content(
-                model='gemini-3.1-flash-lite',
+                model='gemini-2.5-flash',
                 contents=prompt,
             )
             match = re.search(r"0\.\d+|1\.0|\d+", response.text.strip())
             if match:
-                semantic_score = float(match.group()) * 100
-                if semantic_score > 100:  # Guard against raw percentages
-                    semantic_score = min(semantic_score, 100.0)
+                parsed_val = float(match.group())
+                if parsed_val > 1.0:
+                    semantic_score = min(parsed_val, 100.0)
+                else:
+                    semantic_score = parsed_val * 100
         except Exception:
-            pass # Keep fallback if API fails temporarily
+            pass 
 
     final_score = (semantic_score * 0.50) + (keyword_score * 0.40) + (links_score * 0.10)
     final_score = round(final_score, 2)
