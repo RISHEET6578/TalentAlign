@@ -98,3 +98,13 @@ JSON
     "missing_skills_in_demand": ["kubernetes", "aws"]
   }
 }
+
+## 📬 Contact & Support (Q&A)
+
+Have questions about the architecture, optimization choices, or deployment of **SwiftNexus AI**? Feel free to reach out or connect!
+
+* **GitHub:** [@RISHEET6578](https://github.com/RISHEET6578)
+* **LinkedIn:** [Connect me!!](https://www.linkedin.com/in/risheet-sunkari-107429259)
+* **Email:** `sunkaririshee2005@gmail.com`
+
+Want to try!! Browse this!!! - [https://talentalign.streamlit.app/](https://talentalign.streamlit.app/)
