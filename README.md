@@ -9,18 +9,19 @@
 ## 🏛️ Architecture Overview
 
 The system is engineered using a decoupled microservices-style architecture to ensure complete isolation of concerns, secure environment abstraction, and flawless scalability.
+
 +-----------------------------------+                +-----------------------------------+
 |        Streamlit Frontend         |   REST API     |          FastAPI Backend          |
-|  (Hosted on Streamlit Community)  | --------------> |        (Hosted on Render)         |
+|  (Hosted on Streamlit Community)  | -------------> |        (Hosted on Render)         |
 +-----------------------------------+   (HTTP POST)  +-----------------------------------+
-|
-+--------------+--------------+
-|                             |
-v                             v
-+---------------+             +---------------+
-| Local Parser  |             |  Gemini 2.5   |
-| (Regex Engine)|             |     Flash     |
-+---------------+             +---------------+
+                                                                       |
+                                                        +--------------+--------------+
+                                                        |                             |
+                                                        v                             v
+                                                +---------------+             +---------------+
+                                                | Local Parser  |             |  Gemini 2.5   |
+                                                | (Regex Engine)|             |     Flash     |
+                                                +---------------+             +---------------+
 
 * **Frontend (UI Layer):** Built with **Streamlit**, providing a clean, multi-column dashboard workspace that safely manages view states, layout rendering, and color-coded badge populations completely isolated from backend analytics.
 * **Backend (Engine Layer):** Built with **FastAPI**, strictly abstracting private environment authorizations (`GEMINI_API_KEY`), running custom rule-based dictionary lookups, and orchestration routines.
